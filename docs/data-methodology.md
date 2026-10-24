@@ -1,8 +1,10 @@
 # Wind-generation data methodology and technical specification
 
 Research date: **24 October 2026**. Scope: delivery during **January 2026**.
-Status: documentation checkpoint only; no application, ingestion pipeline, or
-forecast-accuracy results have been implemented. References are listed in section 12.
+Status: **backend methodology version 2.0**, implemented in `backend/`.
+The historical probes in section 4 belong to the original research checkpoint.
+Section 13 records the implementation decisions and remaining uncertainty.
+References are listed in section 12. No unconditional accuracy claim is made.
 
 ## 1. Findings and scope
 
@@ -244,11 +246,15 @@ These sources support the stated **normal schedules**; this research has not
 verified every January emergency extension or exceptional auction notice. Do
 not describe the table as proof of each historical auction's actual close.
 
-**Proposed primary scenario, requiring confirmation before implementation:**
-Nord Pool N2EX hourly day-ahead, 09:50 `Europe/London` on D-1, because a dated
-product specification provides an explicit gate closure. EPEX 09:20 is a separate
-supported scenario, not an interchangeable label. Store the selected market,
-product, clock, timezone, and schedule reference with every evaluation.
+**Configurable implementation default, not a confirmed assessment requirement:**
+Nord Pool N2EX hourly day-ahead, 09:50 `Europe/London` on D-1. The dated product
+specification and support page were rechecked for the backend checkpoint. EPEX
+09:20 is a separate supported scenario. A customer can set an earlier internal
+`decision_time`; the backend rejects an internal time later than the selected
+market gate. A `custom` scenario requires an explicit decision time and does not
+claim an exchange deadline. Responses distinguish market gate, internal time,
+effective cutoff, timezone, and boundary rule. No internal procurement lead time
+has been established by the sources or supplied by the assessment.
 
 Do not confuse these times with:
 
@@ -285,10 +291,12 @@ period 48. Do not stop at January 31 midnight, discard it because its publicatio
 is in February, or include February's first delivery interval. Local settlement
 dates/periods, UTC storage, and explicit interval ends must remain distinct. [R11]
 
-### Proposed hourly comparison (explicit modeling assumption)
+### Implemented opt-in hourly comparison (explicit modeling assumption)
 
-Keep the native half-hour actuals and hourly forecasts. Subject to confirmation
-of WINDFOR's interval semantics, propose **744 hourly evaluation intervals**:
+Keep the native half-hour actuals and hourly forecasts. The default
+`comparison_mode=unverified` exposes the data and coverage but withholds scores.
+Explicitly selecting `hourly_average_assumption` enables **744 possible hourly
+evaluation intervals** under this declared interpretation:
 
 ```text
 A_hour(t) = (A_halfhour(t) + A_halfhour(t + 30 minutes)) / 2
@@ -301,18 +309,22 @@ would be the sum of each half-hour MW multiplied by 0.5 hours, expressed in MWh.
 The final hourly pair uses actuals at January 31 23:00 **and 23:30** and the
 forecast targeted at 23:00; it does not require a February 00:00 forecast.
 
-**Approval gate:** this is an hourly-average interpretation, not a confirmed
-extra field in WINDFOR. Obtain Elexon/NESO clarification, or explicitly accept
-and label this assumption before publishing numerical accuracy results. If
-WINDFOR is a point forecast, reassess the matching convention and disclose its
-support mismatch rather than advertising interval-average accuracy.
+**Explicit assumption gate:** this is an hourly-average interpretation, not a
+verified WINDFOR property. The request option (or an explicit deployment setting)
+acknowledges that interpretation; responses still say
+`forecast_semantics_verified=false` and `available_under_assumption`. Obtain
+Elexon/NESO clarification before calling these unconditional interval-average
+accuracy scores. If WINDFOR is a point forecast, reassess the comparison rather
+than advertising interval-average accuracy. In unverified mode, the two observed
+actual half-hours and selected raw hourly forecast remain visible, but errors
+and accuracy metrics are null. Cadence alone cannot establish temporal support.
 
 For each native half-hour, preserve its original actual and matching status. A
 `:30` slot has no exact native WINDFOR target in the inspected data. Do not label
 that as an upstream outage; it is a resolution mismatch. A future step-held or
 interpolated half-hour presentation would be a **derived** series requiring its
 own approved method and label, not an additional observation. Do not use it to
-double the claimed number of independent forecasts.
+double the claimed number of native forecast observations.
 
 ## 7. Selecting the latest eligible forecast without hindsight
 
@@ -323,10 +335,12 @@ For scenario `s` and delivery day `D`, construct a timezone-aware cutoff
 UTC. The same day-ahead cutoff applies to every delivery target on D; it is not
 `startTime - 24 hours`.
 
-Use **strictly earlier** publication timestamps: `publishTime < C_s(D)`.
-A publication exactly at auction closure is excluded because there is no evidence
-that it was received and actionable before order submission closed. This strict
-boundary is our conservative modeling policy, distinct from API bound inclusivity.
+Version 2 defaults to **no later than**: `publishTime <= C_s(D)`, following the
+backend checkpoint's explicit requirement. `cutoff_inclusive=false` restores the
+version 1 strict-before policy (`<`). This is a publication-time boundary rule,
+not proof that a record timestamped exactly at market closure was actionable.
+The strict mode is appropriate for a conservative boundary sensitivity check;
+neither rule proves actual receipt. The chosen rule is returned in metadata.
 
 For each target `t`, select:
 
@@ -334,7 +348,7 @@ For each target `t`, select:
 eligible(t, s) = records where:
     dataset == WINDFOR
     startTime == t
-    publishTime < C_s(local_delivery_day(t))
+    publishTime <= C_s(local_delivery_day(t))  # use < when cutoff_inclusive=false
     publishTime < t
 
 selected(t, s) = record at maximum publishTime in eligible(t, s)
@@ -363,11 +377,14 @@ that were knowable at the purchase cutoff.
    candidate's publication through the cutoff** completed successfully. Otherwise
    a later eligible publication could be missing; report selection as incomplete,
    not "latest".
-5. If no eligible candidate exists, search progressively earlier bounded windows
-   (e.g. preceding calendar days), subject to a configured research/request budget
-   and documented source availability. An exhausted search is "no forecast found
-   within searched history", not evidence that no forecast ever existed. Record
-   the searched bounds. Never fall back to a post-cutoff run.
+5. The backend uses a bounded, configurable lookback: start the publication search
+   `WIND_LOOKBACK_DAYS` calendar days before the first requested delivery day
+   (default 3, permitted 1-14). Retrieve through D-1 for the final requested day.
+   If no candidate is found, report missing within these returned search bounds;
+   do not claim no forecast ever existed. Increasing the lookback is an explicit
+   operator action, not an unbounded automatic archive crawl. Never fall back to
+   a post-cutoff run. History requests also fetch the target's delivery day to
+   display ineligible later publications; they are never included in backtests.
 6. Filter delivery targets to January; deduplicate overlapping windows; apply the
    cutoff predicate; join on the approved temporal support. Preserve missing slots.
 
@@ -405,8 +422,9 @@ availability claims beyond this documented assumption.
   preserve conflict evidence and do not count it as a valid evaluation pair.
 - Distinct publications for one forecast target are legitimate vintages. Apply
   the as-of rule, not duplicate removal by `startTime` alone.
-- For ex-post actuals, use the latest unambiguous publication present in the
-  recorded extraction snapshot. Preserve earlier versions and the selected
+- For ex-post actuals, use the latest publication present in the extraction
+  snapshot; a null/conflicted latest value is unusable, not a reason to fall back.
+  Preserve retrieved earlier versions in the in-memory snapshot and the selected
   `actualPublishTime`. This is a latest-available-outturn evaluation, not proof of
   final settlement data. Re-extraction can change results; record the snapshot.
 
@@ -458,11 +476,16 @@ availability claims beyond this documented assumption.
   separately documented methodology. January history was accessible here, so no
   substitution was necessary.
 
-For reproducibility, retain request URL/parameters, UTC retrieval time, response
+For reproducibility, responses retain request URL/parameters, UTC retrieval time, response
 checksum, response status, source dataset, native resolution, selected timestamps,
 normalization/methodology version, decision scenario, and exclusion counts. Raw
-data snapshots, if introduced later, need a deliberate local storage/ignore policy;
-do not add downloaded datasets or machine-private logs to this documentation commit.
+data snapshots, if introduced later, need a deliberate durable storage/ignore policy.
+This backend has no disk persistence: successful parsed daily batches are cached
+in bounded process memory (default 128 entries, 3,600-second TTL), shared by all
+views and cutoff scenarios. Same-key concurrent loads are coalesced. Failed
+windows are not cached and fail the entire analysis with 502/503/504 rather than
+returning a partial-success score. Restarts cause refetches, not data loss from a
+purported persistent store. Separate workers have separate caches.
 
 ## 9. Forecast evaluation metrics
 
@@ -530,12 +553,14 @@ or `100 - WAPE` as an accuracy percentage.
 Display MAE, RMSE, signed bias, WAPE where defined, paired count/coverage,
 resolution, source coverage, forecast horizon/age, scenario, and extraction time
 together. Compare scenarios on their common valid targets (and show each one's
-individual coverage) so missingness does not create a misleading ranking. No
-metric values are asserted in this checkpoint.
+individual coverage) so missingness does not create a misleading ranking. The
+backend evaluates one scenario per request; it does not implement a scenario
+ranking or claim statistical independence of hourly errors.
 
-## 10. Required checks for the later implementation
+## 10. Backend acceptance checks
 
-These are acceptance criteria, **not claims that application tests already exist**:
+The backend suite uses explicitly synthetic fixtures and mocked HTTP responses
+to exercise these criteria. Live smoke checks are recorded separately:
 
 1. Contract parsing accepts the two different stream arrays, rejects envelopes
    passed to a stream parser, validates required fields, and catches truncated JSON.
@@ -548,8 +573,8 @@ These are acceptance criteria, **not claims that application tests already exist
 5. Calendar D-1 selection crosses into December 31 for January 1; every target on
    a delivery day uses the same scenario cutoff. UTC parsing is independent of
    the host timezone. If generalized, test both UK daylight-saving transitions.
-6. A later publication after cutoff, or exactly at cutoff, cannot displace the last
-   strictly earlier eligible publication. Multiple targets within one run, missing
+6. A publication after cutoff cannot be selected. Equality is included by default
+   and excluded in strict mode, with tests for both. Multiple targets within one run, missing
    targets in a newer run, and unsorted responses are handled per target.
 7. Exact duplicates are idempotent; conflicting same-key values and null latest
    values produce explicit unusable states, not silent older-run fallbacks.
@@ -568,17 +593,17 @@ These are acceptance criteria, **not claims that application tests already exist
 | Item | Status / next action |
 | --- | --- |
 | January actual/history availability | Confirmed accessible in this research; native hourly WINDFOR, not native half-hour forecasts |
-| Market/product and internal purchase deadline | Confirm the proposed N2EX 09:50 scenario, or select another documented scenario; supply an internal lead time only if required |
-| Hourly forecast support | Clarify point-versus-hour-average semantics with Elexon/NESO, or explicitly approve the section 6 hourly-average assumption before publishing metrics |
+| Market/product and internal purchase deadline | Configurable N2EX 09:50 default, EPEX 09:20 alternative; no claim that either is an assessment requirement or the customer's internal deadline |
+| Hourly forecast support | Still unresolved; default scores withheld, opt-in hourly-average assumption returns explicitly conditional metrics |
 | Publication timetable/horizon discrepancies | Unresolved; use returned UTC timestamps, do not adjust them to fit documentation; raise with Elexon if needed |
 | Historical first accessibility and corrections | No receipt/revision history in these stream fields; backtest remains conditional as-published, not proven trader-available |
 | Exceptional January market deadlines | Normal schedules researched; date-specific extensions/outages not exhaustively verified |
 | Retention and silent upstream completeness | No retention SLA located; successful coverage probes do not guarantee availability forever or prove every historical vintage is preserved |
 | Coverage and economics | GB operationally visible wind only; no Northern Ireland/embedded uplift or unsupported purchase-profit claim |
 
-No provider has been contacted, no deployment chosen, and no dependency installed
-as part of this checkpoint. These implementation decisions remain visible rather
-than being silently encoded as facts.
+No provider has been contacted and no deployment platform selected. Backend
+dependencies are installed only in the ignored project-local virtual environment.
+These choices and limitations remain explicit in the API, tests, and setup notes.
 
 ## 12. Authoritative references and research notes
 
@@ -626,6 +651,14 @@ important when interpreting January 2026. Links point to the source owners.
 - **[R12] Hyndman and Athanasopoulos, Forecasting: Principles and Practice,
   third edition**, section 5.8, point-forecast accuracy and percentage-error pitfalls:
   <https://otexts.com/fpp3/toolbox.html#sec-accuracy>
+- **[R13] Elexon, Balancing Mechanism Reporting Agent user requirements** —
+  appendix C.1 identifies WINDFOR, its BSC Q6.1.17 reference and D-to-D+2 coverage,
+  but does not establish an averaging operator for the modern stream's MW field:
+  <https://bscdocs.elexon.co.uk/bsc-module/user-requirements-specifications/balancing-mechanism-reporting-agent>
+- **[R14] NESO, Day Ahead Wind Forecast resource** — separately published incentive
+  forecast, MW units, settlement-period fields and daily publication description;
+  not proof of the WINDFOR stream's temporal semantics and not used as replacement data:
+  <https://www.neso.energy/data-portal/day-ahead-wind-forecast/day_ahead_wind_forecast>
 
 Research access notes: Elexon's API pages are JavaScript-rendered; their linked
 production OpenAPI was parsed directly, API guidance was read in a browser, and
@@ -639,5 +672,93 @@ for the valid historical probes recorded above.
 
 AI assistance: this specification was researched and drafted with the coding
 assistant, model `gpt-6-astra`. AI output is not a data source; the factual claims
-are tied to the official references and live probes above. The assessment's
-project-wide AI disclosure must also be included when the root README is created.
+are tied to the official references and live probes above. Project-wide AI
+disclosure is included in the root `README.md`.
+
+## 13. Backend decision record and verification
+
+### Evidence review and decisions (24 October 2026)
+
+1. **Market policy:** R8 sections 1.2 and 3.1 were re-read from the official PDF;
+   R9 corroborates next-day delivery, 09:50 closure and later result publication.
+   R7 supports a distinct EPEX 09:20 scenario. These justify the configurable
+   `n2ex` default, not a claim about the assessment/customer's internal deadline.
+   The response carries `market_gate_time`, `internal_decision_time`, and
+   `effective_decision_time` separately. Earlier internal times are configurable;
+   there is no invented latency buffer. Exceptional January deadlines remain
+   unverified, and normal schedules must not be presented as an operations log.
+2. **Cutoff equality:** the backend checkpoint says "no later than", so the
+   implemented default is inclusive. The original strict-before policy remains
+   available via `cutoff_inclusive=false`; both boundary behaviors are tested.
+   Neither makes an exactly-at-gate publication proof of executable availability.
+3. **Forecast quantity:** rechecking R3 confirms nullable integer `generation`
+   without an averaging definition. R5 establishes hourly MW forecasts, not the
+   operator defining each value's temporal support. Additional inspection of
+   R13 did not resolve that operator. R14 is a different, settlement-period
+   forecast publication, so its metadata must not be transferred to WINDFOR.
+   No definitive point/interval-average interpretation was verified. The hourly
+   cadence of the live data cannot supply that missing definition.
+4. **Comparison:** preserve the observed hourly forecast without resampling.
+   Actual hourly mean MW is well-defined from its two equal-duration half-hours.
+   Default `unverified` mode exposes both with counts but no calculated errors.
+   Explicit `hourly_average_assumption` mode interprets the forecast as mean MW
+   over the same `[t,t+1h)` interval, so the conditional comparison uses equivalent
+   hourly quantities and units **under that disclosed assumption**. It is not an
+   empirically established equivalence. All responses retain the unresolved
+   semantics warning; no unconditional or half-hour forecast accuracy is claimed.
+5. **Availability:** the latest eligible published key is reconstructed within
+   the reported search bounds. First public accessibility, backfills, and trader
+   receipt are not verified. An empty bounded search is not a claim about all
+   history. `retrieved_at` is extraction provenance, not January receipt evidence.
+6. **Practical implementation:** daily source windows, a bounded in-memory TTL
+   cache, typed source/response models, pure selection/metric functions, and a
+   small FastAPI layer. No database, disk persistence, alternative dataset, or
+   fixture fallback is needed. Invalid required source fields fail the window;
+   numeric nulls and legitimate missing slots remain explicit. Conflicts preserve
+   the key but suppress an arbitrary winning value. Failures prevent a successful
+   partial "latest" analysis. Error-reason counts can overlap across one hour.
+
+### Live backend smoke check
+
+A temporary local Uvicorn process was started and exercised over actual HTTP;
+its upstream client used **real Elexon requests**, with no mocked transport or
+fixture substitution. The process was stopped after verification.
+
+- January source batches were retrieved on 24 October 2026 between
+  **17:40:07 and 17:40:12 UTC** across 64 daily request windows.
+- Health, summary, series, errors, and publication history all returned HTTP 200.
+- The month had 1,488 usable actual half-hours, 744 actual hourly means, and
+  744 usable eligible hourly forecasts for the default N2EX scenario; there were
+  no same-key conflicts or duplicates in this extraction.
+- Default summary had `status=semantics_unverified`, zero evaluated pairs, and
+  null accuracy metrics despite full data-pair availability. This is intentional.
+- Explicit research opt-in exercised conditional scores for 744 pairs; every
+  selected publication was checked against its cutoff and delivery target.
+  No numeric score is promoted here as verified interval-average accuracy.
+- The final January 23:30 actual component was present. Error analysis returned
+  31 daily groups. January 1 00:00 publication history returned 24 vintages and
+  selected `2025-12-31T09:30:00Z` for the N2EX cutoff, excluding later publications.
+- Repeated views reused validated cached batches and retained their original
+  retrieval timestamps. These counts describe that extraction, not a hardcoded
+  API success state or a guarantee of future upstream availability.
+
+Automated checks are run separately with synthetic fixtures and an outbound
+network guard; commands are in `backend/README.md`. They are not substitutes
+for the live check above. Frontend implementation remains unchanged.
+
+### Automated verification snapshot
+
+On Python 3.13.5 in the isolated backend virtual environment:
+
+- `python -m pytest --cov=app --cov-report=term-missing -q`: **85 passed**;
+  coverage.py reported **99% combined statement/branch coverage**. This measures
+  exercised code, not certainty about upstream data semantics.
+- `ruff check app tests` and `ruff format --check app tests`: passed.
+- `mypy app`: passed for all 15 application source files.
+- `python -m pip check`: no broken requirements.
+- From `frontend/`, `npm run lint` and `npm run build`: passed. SHA-256 checks
+  of every pre-existing non-generated frontend file matched the inspection baseline.
+
+The added shutdown regression exposed a cancelled-before-start task retaining
+an in-flight cache entry; cleanup now clears that state after awaiting cancelled
+tasks. The failing test was retained, the cause fixed, and the full suite rerun.

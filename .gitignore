@@ -1,0 +1,25 @@
+# Local environment and credentials (examples are safe to commit)
+.env
+.env.*
+!.env.example
+!**/.env.example
+.venv/
+venv/
+
+# Python checks and generated files
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage*
+htmlcov/
+*.egg-info/
+
+# Dependencies, build output, and local data are not source
+node_modules/
+dist/
+build/
+*.log
+backend/data/
+.DS_Store
