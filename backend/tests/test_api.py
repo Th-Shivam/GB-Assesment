@@ -2,6 +2,7 @@ import asyncio
 
 import httpx
 import pytest
+from pydantic import ValidationError
 
 from app.main import create_app
 from tests.factories import actual, forecast, instant, payload
@@ -69,6 +70,45 @@ def test_health_no_upstream_request_and_openapi_typed(settings):
         assert not calls
 
     exercise(settings, synthetic_handler(calls), action)
+
+
+def test_cors_exact_allowlist_handles_preflight_without_credentials(settings):
+    calls = []
+    cors_settings = settings.__class__(
+        cors_origins="https://winddesk.example.com/, https://preview.example.com"
+    )
+
+    async def action(api):
+        preflight = await api.options(
+            "/health",
+            headers={
+                "Origin": "https://winddesk.example.com",
+                "Access-Control-Request-Method": "GET",
+            },
+        )
+        assert preflight.status_code == 200
+        assert preflight.headers["access-control-allow-origin"] == "https://winddesk.example.com"
+        assert preflight.headers["access-control-allow-methods"] == "GET"
+        assert "access-control-allow-credentials" not in preflight.headers
+
+        allowed = await api.get("/health", headers={"Origin": "https://preview.example.com"})
+        assert allowed.headers["access-control-allow-origin"] == "https://preview.example.com"
+        denied = await api.get("/health", headers={"Origin": "https://evil.example.com"})
+        assert "access-control-allow-origin" not in denied.headers
+        assert not calls
+
+    exercise(cors_settings, synthetic_handler(calls), action)
+
+
+def test_cors_rejects_wildcard_and_non_origin_values(settings):
+    for value in (
+        "*",
+        "https://*.example.com",
+        "https://example.com/path",
+        "https://user:pass@example.com",
+    ):
+        with pytest.raises(ValidationError):
+            settings.__class__(cors_origins=value)
 
 
 def test_summary_series_errors_cache_and_assumption_gating(settings):

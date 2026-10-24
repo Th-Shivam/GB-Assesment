@@ -13,8 +13,9 @@ operationally visible Great Britain wind, not every UK/embedded generator.
 - React/Vite frontend dashboard implemented in `frontend/`, with real FastAPI data
   loading, methodology-aware conditional states, charts, publication history, and
   comparison tables.
-- Local Docker Compose integration implemented for the frontend and backend; public
-  deployment, repository anonymity review, and the video demo remain later work.
+- Local Docker Compose integration implemented for the frontend and backend, with
+  Vercel/Render deployment preparation; public deployment, repository anonymity review,
+  and the video demo remain later work.
 
 See **[backend setup and API examples](backend/README.md)** and
 **[data methodology](docs/data-methodology.md)** before interpreting results. See the

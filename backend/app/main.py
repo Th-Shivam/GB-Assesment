@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 import httpx
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from starlette.middleware.cors import CORSMiddleware
 
 from app.api.routes import router
 from app.core.config import Settings
@@ -46,6 +47,16 @@ def create_app(
         ),
         lifespan=lifespan,
     )
+
+    if config.cors_origin_list:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=config.cors_origin_list,
+            allow_credentials=False,
+            allow_methods=["GET"],
+            allow_headers=["Accept", "Content-Type"],
+            max_age=600,
+        )
 
     @app.exception_handler(UpstreamError)
     async def upstream_error(request: Request, exc: UpstreamError) -> JSONResponse:

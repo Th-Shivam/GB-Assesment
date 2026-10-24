@@ -106,10 +106,10 @@ For more than one exact origin, use a comma-separated value:
 WIND_CORS_ORIGINS=https://winddesk.vercel.app,https://preview.example.com
 ```
 
-The separate backend CORS change in this checkpoint allows only those exact HTTP(S)
-origins, handles GET preflight requests, and does not enable credentials or wildcard
-origins. Set a stable preview/custom domain if preview deployments need a persistent
-allowlist entry; do not blindly allow every generated preview URL.
+The backend CORS implementation allows only those exact HTTP(S) origins, handles GET
+preflight requests, and does not enable credentials or wildcard origins. Set a stable
+preview/custom domain if preview deployments need a persistent allowlist entry; do not
+blindly allow every generated preview URL.
 
 The alternative is a same-origin reverse proxy: route `/backend/*` from the frontend
 origin to the backend and set `VITE_API_BASE_URL=/backend` only in that deliberately

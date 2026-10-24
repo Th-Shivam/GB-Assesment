@@ -26,6 +26,11 @@ Optional: copy `.env.example` to `.env` and edit the non-secret settings. The ap
 reads `.env` from its working directory; start it from `backend/`. Real `.env`
 files, virtual environments, caches, and build artifacts are ignored by Git.
 
+For a separate frontend origin, set `WIND_CORS_ORIGINS` to an exact comma-separated
+HTTP(S) origin list, for example `https://winddesk.vercel.app`. Wildcards, paths,
+credentials, query strings, and fragments are rejected; credentials are never enabled.
+Leave it empty for same-origin access such as the local Nginx Compose proxy.
+
 ## Endpoints and common query parameters
 
 | GET path | Response |
