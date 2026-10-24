@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: winddesk-backend
+    runtime: docker
+    plan: free
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    healthCheckPath: /health
+    envVars:
+      - key: WIND_DEFAULT_MARKET
+        value: n2ex
+      - key: WIND_COMPARISON_MODE
+        value: unverified
+      - key: WIND_CORS_ORIGINS
+        sync: false

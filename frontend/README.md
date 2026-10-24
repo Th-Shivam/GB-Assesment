@@ -39,6 +39,12 @@ same `/backend` browser path. Its Nginx runtime reverse-proxies that path to the
 internal `backend:8000` service, so the browser never needs to resolve a Docker
 service name. See `../docs/docker.md` for startup and health-check commands.
 
+For public deployment preparation, use the checked-in `vercel.json` from a Vercel
+project whose root directory is `frontend/`. Set `VITE_API_BASE_URL` separately for
+Vercel Preview and Production to the corresponding absolute HTTPS backend origin;
+see `../docs/deployment.md`. Vercel is not configured to proxy `/backend` to an
+arbitrary backend.
+
 ### Separate-origin CORS requirement
 
 The local `/backend` proxy avoids browser CORS. When the frontend and backend use

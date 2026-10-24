@@ -18,7 +18,8 @@ operationally visible Great Britain wind, not every UK/embedded generator.
 
 See **[backend setup and API examples](backend/README.md)** and
 **[data methodology](docs/data-methodology.md)** before interpreting results. See the
-**[local Docker guide](docs/docker.md)** for the two-container development stack.
+**[local Docker guide](docs/docker.md)** for the two-container development stack and
+the **[deployment preparation guide](docs/deployment.md)** for Vercel/Render setup.
 
 ## Important interpretation limits
 
