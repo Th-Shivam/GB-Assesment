@@ -10,7 +10,9 @@ operationally visible Great Britain wind, not every UK/embedded generator.
 - Published-as-of forecast selection, configurable decision policy, explicit missing-data
   reporting, and a bounded in-memory upstream cache.
 - Synthetic/mocked automated tests, linting, and Python type checking.
-- The existing React/Vite frontend is unchanged; no dashboard is implemented yet.
+- React/Vite frontend dashboard implemented in `frontend/`, with real FastAPI data
+  loading, methodology-aware conditional states, charts, publication history, and
+  comparison tables.
 - Docker, deployment, repository anonymity review, and the video demo remain later work.
 
 See **[backend setup and API examples](backend/README.md)** and

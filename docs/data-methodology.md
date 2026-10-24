@@ -744,7 +744,9 @@ fixture substitution. The process was stopped after verification.
 
 Automated checks are run separately with synthetic fixtures and an outbound
 network guard; commands are in `backend/README.md`. They are not substitutes
-for the live check above. Frontend implementation remains unchanged.
+for the live check above. The frontend checkpoint connects the dashboard to these
+typed endpoints without adding a fixture fallback; its own unit tests use synthetic
+responses and block outbound network calls.
 
 ### Automated verification snapshot
 
