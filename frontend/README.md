@@ -34,6 +34,11 @@ fails the build with a configuration error; the runtime client also retains a vi
 defensive configuration-error state. This variable is public build-time configuration;
 no credentials belong in it.
 
+The local Docker Compose stack uses a separate explicit `compose` build mode with the
+same `/backend` browser path. Its Nginx runtime reverse-proxies that path to the
+internal `backend:8000` service, so the browser never needs to resolve a Docker
+service name. See `../docs/docker.md` for startup and health-check commands.
+
 ### Separate-origin CORS requirement
 
 The local `/backend` proxy avoids browser CORS. When the frontend and backend use

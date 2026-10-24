@@ -6,6 +6,7 @@ describe('typed API client', () => {
   it('uses the local proxy only outside production and normalizes configured roots', () => {
     expect(resolveApiBaseUrl(undefined, 'development')).toEqual({ baseUrl: '/backend', mode: 'development' })
     expect(resolveApiBaseUrl('/backend/', 'development')).toEqual({ baseUrl: '/backend', mode: 'development' })
+    expect(resolveApiBaseUrl('/backend', 'compose')).toEqual({ baseUrl: '/backend', mode: 'development' })
     expect(resolveApiBaseUrl('https://api.example.test/v1///', 'production')).toEqual({ baseUrl: 'https://api.example.test/v1', mode: 'production' })
     expect(() => resolveApiBaseUrl(undefined, 'production')).toThrow(/configuration is missing/)
     expect(() => resolveApiBaseUrl('/backend', 'production')).toThrow(/absolute HTTPS/)

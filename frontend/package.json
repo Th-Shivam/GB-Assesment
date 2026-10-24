@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "npm run typecheck && vite build",
+    "build:compose": "npm run typecheck && vite build --mode compose",
     "lint": "oxlint",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
