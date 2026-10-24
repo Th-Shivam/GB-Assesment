@@ -1,9 +1,11 @@
 import { useCallback, useState } from 'react'
-import { api } from '../api/client'
+import { api, apiConfigurationError } from '../api/client'
 import type { HistoryResponse, Policy } from '../api/schemas'
 import { useResource } from '../hooks/useResource'
 import { formatNumber, formatTimestamp, issueLabel } from '../lib/format'
 import { EmptyState, ErrorState, Loading, Pagination } from './Feedback'
+
+const fallbackConfigurationError = new Error('The frontend API configuration is unavailable.')
 
 function HistoryTable({ history }: { history: HistoryResponse }) {
   const [page, setPage] = useState(0)
@@ -28,7 +30,9 @@ function HistoryTable({ history }: { history: HistoryResponse }) {
 }
 
 export function PublicationHistory({ policy, target, onTarget }: { policy: Policy; target: string; onTarget: (target: string) => void }) {
-  const load = useCallback((signal: AbortSignal) => api.publications(target, policy, signal), [target, policy])
+  const load = useCallback((signal: AbortSignal) => api
+    ? api.publications(target, policy, signal)
+    : Promise.reject(apiConfigurationError ?? fallbackConfigurationError), [target, policy])
   const resource = useResource(`${JSON.stringify(policy)}:${target}`, load)
   // January is GMT. These constrained controls deliberately create UTC instants,
   // never browser-local Date objects or a general-purpose DST conversion.

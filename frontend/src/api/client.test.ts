@@ -1,8 +1,18 @@
 import { describe, expect, it, vi } from 'vitest'
-import { ApiError, apiUrl, assertCoherent, createApi, policyParams } from './client'
+import { ApiError, apiUrl, assertCoherent, createApi, policyParams, resolveApiBaseUrl } from './client'
 import { makeDashboard, makeHistory, jsonResponse } from '../test/fixtures'
 
 describe('typed API client', () => {
+  it('uses the local proxy only outside production and normalizes configured roots', () => {
+    expect(resolveApiBaseUrl(undefined, 'development')).toEqual({ baseUrl: '/backend', mode: 'development' })
+    expect(resolveApiBaseUrl('/backend/', 'development')).toEqual({ baseUrl: '/backend', mode: 'development' })
+    expect(resolveApiBaseUrl('https://api.example.test/v1///', 'production')).toEqual({ baseUrl: 'https://api.example.test/v1', mode: 'production' })
+    expect(() => resolveApiBaseUrl(undefined, 'production')).toThrow(/configuration is missing/)
+    expect(() => resolveApiBaseUrl('/backend', 'production')).toThrow(/absolute HTTPS/)
+    expect(() => resolveApiBaseUrl('http://api.example.test', 'production')).toThrow(/absolute HTTPS/)
+    expect(() => resolveApiBaseUrl('https://user:pass@api.example.test', 'production')).toThrow(/absolute HTTPS/)
+  })
+
   it('builds safe same-origin and absolute URLs without credentials', () => {
     expect(apiUrl('/backend', '/health', { market: 'n2ex', empty: '' })).toBe('/backend/health?market=n2ex&empty=')
     expect(apiUrl('https://api.example.test/v1', '/health')).toBe('https://api.example.test/v1/health')

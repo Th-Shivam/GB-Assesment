@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react'
-import { api } from './api/client'
+import { api, apiConfigurationError } from './api/client'
 import type { DashboardData, Policy } from './api/schemas'
 import { ComparisonTable } from './components/ComparisonTable'
 import { EmptyState, ErrorState, Loading } from './components/Feedback'
@@ -14,6 +14,7 @@ import { coverageStatus, metricsAvailable, metricStatus, retrievalRange } from '
 import { formatDay, formatNumber, formatTimestamp, ukDay } from './lib/format'
 
 const januaryDays = Array.from({ length: 31 }, (_, i) => `2026-01-${String(i + 1).padStart(2, '0')}`)
+const fallbackConfigurationError = new Error('The frontend API configuration is unavailable.')
 
 function Analysis({ data, policy }: { data: DashboardData; policy: Policy }) {
   const [day, setDay] = useState('all')
@@ -80,9 +81,14 @@ export function Dashboard() {
   // Always request unverified explicitly, even if a server operator changed the
   // deployment default. Only a user action can opt this browser into assumptions.
   const [policy, setPolicy] = useState<Policy>({ comparison_mode: 'unverified' })
-  const load = useCallback((signal: AbortSignal) => api.dashboard(policy, signal), [policy])
+  const load = useCallback((signal: AbortSignal) => api
+    ? api.dashboard(policy, signal)
+    : Promise.reject(apiConfigurationError ?? fallbackConfigurationError), [policy])
   const resource = useResource(JSON.stringify(policy), load)
-  const health = useResource('health', api.health)
+  const healthLoad = useCallback((signal: AbortSignal) => api
+    ? api.health(signal)
+    : Promise.reject(apiConfigurationError ?? fallbackConfigurationError), [])
+  const health = useResource('health', healthLoad)
 
   return <div className="app-shell">
     <a className="skip-link" href="#main-content">Skip to analysis</a>

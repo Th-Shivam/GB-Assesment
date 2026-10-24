@@ -14,15 +14,52 @@ export class ApiError extends Error {
   }
 }
 
+export interface ApiBaseConfig {
+  baseUrl: string
+  mode: 'development' | 'production'
+}
+
+function absoluteApiUrl(value: string): URL | null {
+  try {
+    const url = new URL(value)
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) return null
+    return url
+  } catch {
+    return null
+  }
+}
+
+export function resolveApiBaseUrl(value: string | undefined, mode: string): ApiBaseConfig {
+  const configured = value?.trim().replace(/\/+$/, '') || ''
+  if (mode !== 'production' && configured === '') return { baseUrl: '/backend', mode: 'development' }
+  if (mode === 'production' && configured === '') {
+    throw new ApiError('Production API configuration is missing. Set VITE_API_BASE_URL to the deployed HTTPS backend URL before building.', 0, 'configuration_error')
+  }
+  if (configured.startsWith('/')) {
+    if (mode === 'production') {
+      throw new ApiError('Invalid production API configuration. VITE_API_BASE_URL must be an absolute HTTPS backend URL with no credentials, query, or fragment.', 0, 'configuration_error')
+    }
+    if (!/^\/(?!\/)[^?#]*$/.test(configured)) {
+      throw new ApiError('Invalid VITE_API_BASE_URL. Use an HTTP(S) API root or a same-origin path.', 0, 'configuration_error')
+    }
+    return { baseUrl: configured, mode: 'development' }
+  }
+  const url = absoluteApiUrl(configured)
+  if (!url || (mode === 'production' && url.protocol !== 'https:')) {
+    throw new ApiError(
+      mode === 'production'
+        ? 'Invalid production API configuration. VITE_API_BASE_URL must be an absolute HTTPS backend URL with no credentials, query, or fragment.'
+        : 'Invalid VITE_API_BASE_URL. Use an HTTP(S) API root or a same-origin path.',
+      0, 'configuration_error',
+    )
+  }
+  return { baseUrl: url.toString().replace(/\/+$/, ''), mode: mode === 'production' ? 'production' : 'development' }
+}
+
 export function apiUrl(base: string, path: string, parameters: Record<string, string> = {}): string {
   const root = base.trim().replace(/\/+$/, '')
   const validRelative = /^\/(?!\/)[^?#]*$/.test(root)
-  let validAbsolute = false
-  try {
-    const url = new URL(root)
-    validAbsolute = ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password && !url.search && !url.hash
-  } catch { /* A relative, same-origin prefix is allowed. */ }
-  if (!validRelative && !validAbsolute && root !== '') {
+  if (!validRelative && !absoluteApiUrl(root) && root !== '') {
     throw new ApiError('Invalid VITE_API_BASE_URL. Use an HTTP(S) API root or a same-origin path.', 0, 'configuration_error')
   }
   const search = new URLSearchParams(parameters).toString()
@@ -127,4 +164,20 @@ export function createApi(base: string, fetcher: typeof fetch = (...args) => fet
   }
 }
 
-export const api = createApi(import.meta.env.VITE_API_BASE_URL || '/backend')
+export type ApiClient = ReturnType<typeof createApi>
+
+// Keep configuration failure inside the rendered application so a production
+// build shows a useful setup message instead of failing on an unhandled module
+// exception or silently attempting the local proxy.
+let configuredApi: ApiClient | null = null
+let configurationFailure: ApiError | null = null
+try {
+  configuredApi = createApi(resolveApiBaseUrl(import.meta.env.VITE_API_BASE_URL, import.meta.env.MODE).baseUrl)
+} catch (error) {
+  configurationFailure = error instanceof ApiError
+    ? error
+    : new ApiError('The frontend API configuration is invalid. Set VITE_API_BASE_URL and rebuild.', 0, 'configuration_error')
+}
+
+export const api = configuredApi
+export const apiConfigurationError = configurationFailure

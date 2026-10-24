@@ -20,10 +20,28 @@ Start FastAPI separately from `backend/`:
 .venv/bin/python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-The default `VITE_API_BASE_URL=/backend` uses the Vite proxy to forward requests to
-`BACKEND_PROXY_TARGET=http://127.0.0.1:8000`. Set `VITE_API_BASE_URL` to an absolute
-HTTP(S) API root for a separately hosted backend. This variable is public build-time
-configuration; no credentials belong in it.
+In development, `VITE_API_BASE_URL=/backend` uses the Vite proxy to forward requests
+to `BACKEND_PROXY_TARGET=http://127.0.0.1:8000`. If `VITE_API_BASE_URL` is omitted in
+development, the same `/backend` proxy default is used.
+
+For a production build, set `VITE_API_BASE_URL` explicitly to the deployed backend
+origin, for example `https://api.example.com`. Production requires an absolute HTTPS
+URL; it does not fall back to `/backend`, localhost, or any other development target.
+The URL is normalized for trailing slashes and may include a server path prefix, but
+it must not include credentials, a query string, or a fragment. The frontend appends
+`/health` and `/api/v1/wind/...` to this root. A missing or invalid production value
+fails the build with a configuration error; the runtime client also retains a visible
+defensive configuration-error state. This variable is public build-time configuration;
+no credentials belong in it.
+
+### Separate-origin CORS requirement
+
+The local `/backend` proxy avoids browser CORS. When the frontend and backend use
+different production origins, the backend deployment must allow the exact frontend
+origin in its CORS policy, including `OPTIONS` preflight requests. Do not use `*` as
+a substitute for an origin allowlist. The current backend does not add CORS headers;
+backend CORS configuration belongs to the later deployment checkpoint and is not
+changed here. A same-origin reverse proxy can avoid this requirement.
 
 ## Dashboard behaviour
 
@@ -48,6 +66,15 @@ npm run test
 npm run typecheck
 npm run build
 ```
+
+Representative production build:
+
+```sh
+VITE_API_BASE_URL=https://api.example.com npm run build
+```
+
+The build output must be generated with the actual deployed API origin. Verify that
+the generated files contain neither `127.0.0.1` nor `localhost` before publishing.
 
 Unit tests use synthetic in-memory responses only and block outbound network calls.
 They cover API schema handling, typed upstream failures, missing metrics, conditional
